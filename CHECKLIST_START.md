@@ -1,0 +1,35 @@
+### 一人がやること
+- [ ] チェックリストを Issues に移す
+- [ ] backup ディレクトリを作成する
+- [ ] Go と node.js 以外の言語実装を削除する
+- [ ] pstree でプロセスを確認
+- [ ] webapp のプロセスを Go 実装に切り替える
+- [ ] /etc/hosts に各サーバーの IP を登録する
+- [ ] レギュレーションにより変えてはいけないファイルを確認する
+- [ ] webapp が読み込んでいる環境変数ファイルを特定する (たぶん ~/.env.sh)
+- [ ] Makefile のパス等を変更し、動くようにする
+- [ ] nginx.conf を編集し、ltsv で解析できるようにする
+  - [このようにする](https://github.com/Nagarei/isucon11-qualify-test/commit/b7e8f2667677831490d8e5966251633c14944015)
+- [ ] pprof をアプリケーションに入れる
+  - [このようにする](https://github.com/Nagarei/isucon11-qualify-test/commit/0153056b705a7b6c265244e45840c8c3a1a134f6)
+- [ ] ベンチマークを回し、初期スコアとログを Issues に貼る
+- [ ] ブラウザでアプリケーションにアクセスできることを確認する
+- [ ] DB のバックアップ ([手順](https://qiita.com/iika0220/items/01d4b8bde4c06cf13fec))
+
+### みんながやること
+- [ ] ローカルで .ssh/config を設定する
+- [ ] 各サーバーで GitHub SSH 鍵を登録
+- [ ] レポジトリを pull する
+- [ ] 以下ディレクトリをレポジトリに入れて、シンボリックリンクを貼る
+  - [ ] /etc/systemd
+  - [ ] /etc/mysql
+  - [ ] /etc/nginx
+  - [ ] /home/isucon/env.sh
+- [ ] alp をインストールする
+  - `wget https://github.com/tkuchiki/alp/releases/download/v1.0.9/alp_linux_amd64.zip`
+  - `unzip alp_linux_amd64.zip`
+  - `sudo install ./alp /usr/local/bin`
+- [ ] pprof に必要なパッケージをインストールする
+  - `sudo apt install graphviz`
+- [ ] pt-query-digest を入れる
+  - [ ] sudo apt-get install percona-toolkit
