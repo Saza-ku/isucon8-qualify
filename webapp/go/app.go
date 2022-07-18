@@ -389,7 +389,7 @@ func main() {
 	e.POST("/admin/api/events/:id/actions/edit", editAdminEventHandler, adminLoginRequired)
 	e.GET("/admin/api/reports/events/:id/sales", getReportHandler, adminLoginRequired)
 	e.GET("/admin/api/reports/sales", getReportsHandler, adminLoginRequired)
-
+	setSeets()
 	e.Start(":8080")
 }
 
@@ -427,4 +427,107 @@ func resError(c echo.Context, e string, status int) error {
 		status = 500
 	}
 	return c.JSON(status, map[string]string{"error": e})
+}
+
+var sheets map[int64]Sheet
+
+var sheetsTotal map[string]int
+var sheetsPrice map[string]int64
+
+func setSeets() {
+	sheets = map[int64]Sheet{}
+	sheetsTotal = map[string]int{
+		"S": 0,
+		"A": 0,
+		"B": 0,
+		"C": 0,
+	}
+	sheetsPrice = map[string]int64{
+		"S": 0,
+		"A": 0,
+		"B": 0,
+		"C": 0,
+	}
+
+	rows, err := db.Query(`SELECT * FROM sheets`)
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+
+	for rows.Next() {
+		var s Sheet
+		err = rows.Scan(&s.ID, &s.Rank, &s.Num, &s.Price)
+		sheets[s.ID] = s
+
+		sheetsTotal[s.Rank]++
+		sheetsPrice[s.Rank] = s.Price
+	}
+
+	err = rows.Close()
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+}
+
+func makeEvent(event Event, userID int64) (*Event, error) {
+	event.Sheets = map[string]*Sheets{
+		"S": {
+			Total:   sheetsTotal["S"],
+			Price:   event.Price + sheetsPrice["S"],
+			Remains: sheetsTotal["S"],
+		},
+		"A": {
+			Total:   sheetsTotal["A"],
+			Price:   event.Price + sheetsPrice["A"],
+			Remains: sheetsTotal["A"],
+		},
+		"B": {
+			Total:   sheetsTotal["B"],
+			Price:   event.Price + sheetsPrice["B"],
+			Remains: sheetsTotal["B"],
+		},
+		"C": {
+			Total:   sheetsTotal["C"],
+			Price:   event.Price + sheetsPrice["C"],
+			Remains: sheetsTotal["C"],
+		},
+	}
+
+	rows, err := db.Query("SELECT * FROM reservations WHERE event_id = ? AND canceled_at IS NULL", event.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	addedSheetsIDs := map[int64]struct{}{}
+
+	for rows.Next() {
+		var reservation Reservation
+		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price)
+		if err != nil {
+			return nil, err
+		}
+
+		sheet := sheets[reservation.SheetID]
+		sheet.Mine = reservation.UserID == userID
+		sheet.Reserved = true
+		sheet.ReservedAtUnix = reservation.ReservedAt.Unix()
+
+		event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
+		event.Sheets[sheet.Rank].Remains--
+		event.Total++
+
+		addedSheetsIDs[reservation.SheetID] = struct{}{}
+	}
+
+	for _, sheet := range sheets {
+		if _, ok := addedSheetsIDs[sheet.ID]; !ok {
+			event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
+			event.Total++
+			event.Remains++
+		}
+	}
+
+	return &event, nil
 }

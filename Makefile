@@ -28,7 +28,7 @@ SLOW_LOG=/var/log/mariadb/slow.log
 slow-on:
 	-sudo rm $(SLOW_LOG)
 	sudo systemctl restart mariadb
-	$(MYSQL) -e "set global slow_query_log_file = '$(SLOW_LOG)'; set global long_query_time = 0.001; set global slow_query_log = 1;"
+	$(MYSQL) -e "set global slow_query_log_file = '$(SLOW_LOG)'; set global long_query_time = 0; set global slow_query_log = 1;"
 
 .PHONY: slow-off
 slow-off:
