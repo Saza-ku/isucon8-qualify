@@ -251,7 +251,7 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		event.Sheets[sheet.Rank].Total++
 
 		var reservation Reservation
-		err := db.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt)
+		err := db.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price)
 		if err == nil {
 			sheet.Mine = reservation.UserID == loginUserID
 			sheet.Reserved = true
@@ -326,7 +326,6 @@ func main() {
 		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"),
 		os.Getenv("DB_DATABASE"),
 	)
-	fmt.Println("piyopiyo")
 
 	var err error
 	db, err = sql.Open("mysql", dsn)
@@ -388,8 +387,8 @@ func main() {
 	e.POST("/admin/api/events", addAdminEventHandler, adminLoginRequired)
 	e.GET("/admin/api/events/:id", getAdminEventHandler, adminLoginRequired)
 	e.POST("/admin/api/events/:id/actions/edit", editAdminEventHandler, adminLoginRequired)
-	e.GET("/admin/api/reports/events/:id/sales", getReportsHandler, adminLoginRequired)
-	e.GET("/admin/api/reports/sales", getReportHandler, adminLoginRequired)
+	e.GET("/admin/api/reports/events/:id/sales", getReportHandler, adminLoginRequired)
+	e.GET("/admin/api/reports/sales", getReportsHandler, adminLoginRequired)
 
 	e.Start(":8080")
 }

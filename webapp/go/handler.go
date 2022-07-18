@@ -75,7 +75,7 @@ func getUserHandler(c echo.Context) error {
 	for rows.Next() {
 		var reservation Reservation
 		var sheet Sheet
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num); err != nil {
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &sheet.Rank, &sheet.Num); err != nil {
 			return err
 		}
 
@@ -103,7 +103,7 @@ func getUserHandler(c echo.Context) error {
 	}
 
 	var totalPrice int
-	if err := db.QueryRow("SELECT IFNULL(SUM(e.price + s.price), 0) FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.user_id = ? AND r.canceled_at IS NULL", user.ID).Scan(&totalPrice); err != nil {
+	if err := db.QueryRow("SELECT IFNULL(SUM(price), 0) FROM reservations WHERE user_id = ? AND canceled_at IS NULL", user.ID).Scan(&totalPrice); err != nil {
 		return err
 	}
 
@@ -256,7 +256,8 @@ func addReservationHandler(c echo.Context) error {
 			return err
 		}
 
-		res, err := tx.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at) VALUES (?, ?, ?, ?)", event.ID, sheet.ID, user.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000000"))
+		res, err := tx.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at, price) VALUES (?, ?, ?, ?, ?)",
+			event.ID, sheet.ID, user.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000000"), sheet.Price+event.Price)
 		if err != nil {
 			tx.Rollback()
 			log.Println("re-try: rollback by", err)
@@ -324,7 +325,7 @@ func removeReservationHandler(c echo.Context) error {
 	}
 
 	var reservation Reservation
-	if err := tx.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt); err != nil {
+	if err := tx.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price); err != nil {
 		tx.Rollback()
 		if err == sql.ErrNoRows {
 			return resError(c, "not_reserved", 400)
@@ -528,7 +529,7 @@ func getReportHandler(c echo.Context) error {
 	for rows.Next() {
 		var reservation Reservation
 		var sheet Sheet
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.Price); err != nil {
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &sheet.Rank, &sheet.Num, &sheet.Price, &event.Price); err != nil {
 			return err
 		}
 		report := Report{
@@ -555,7 +556,7 @@ func getReportsHandler(c echo.Context) error {
 	INNER JOIN sheets s
 	ON s.id = r.sheet_id
 	INNER JOIN events e on e.id = r.event_id
-	ORDER BY reserved_at asc`)
+	ORDER BY r.reserved_at asc`)
 	if err != nil {
 		return err
 	}
@@ -566,7 +567,7 @@ func getReportsHandler(c echo.Context) error {
 		var reservation Reservation
 		var sheet Sheet
 		var event Event
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
 			return err
 		}
 		report := Report{
