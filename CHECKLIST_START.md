@@ -2,7 +2,8 @@
 - [ ] チェックリストを Issues に移す
 - [ ] backup ディレクトリを作成する
 - [ ] Go と node.js 以外の言語実装を削除する
-- [ ] pstree でプロセスを確認
+- [ ] 動いているサービス一覧を確認する
+  - sudo systemctl list-unit-files | grep enabled 
 - [ ] webapp のプロセスを Go 実装に切り替える
 - [ ] /etc/hosts に各サーバーの IP を登録する
 - [ ] レギュレーションにより変えてはいけないファイルを確認する
