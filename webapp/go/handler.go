@@ -19,32 +19,21 @@ func addUserHandler(c echo.Context) error {
 	}
 	c.Bind(&params)
 
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
 	var user User
-	if err := tx.QueryRow("SELECT * FROM users WHERE login_name = ?", params.LoginName).Scan(&user.ID, &user.LoginName, &user.Nickname, &user.PassHash); err != sql.ErrNoRows {
-		tx.Rollback()
+	if err := db.QueryRow("SELECT * FROM users WHERE login_name = ?", params.LoginName).Scan(&user.ID, &user.LoginName, &user.Nickname, &user.PassHash); err != sql.ErrNoRows {
 		if err == nil {
 			return resError(c, "duplicated", 409)
 		}
 		return err
 	}
 
-	res, err := tx.Exec("INSERT INTO users (login_name, pass_hash, nickname) VALUES (?, SHA2(?, 256), ?)", params.LoginName, params.Password, params.Nickname)
+	res, err := db.Exec("INSERT INTO users (login_name, pass_hash, nickname) VALUES (?, SHA2(?, 256), ?)", params.LoginName, params.Password, params.Nickname)
 	if err != nil {
-		tx.Rollback()
 		return resError(c, "", 0)
 	}
 	userID, err := res.LastInsertId()
 	if err != nil {
-		tx.Rollback()
 		return resError(c, "", 0)
-	}
-	if err := tx.Commit(); err != nil {
-		return err
 	}
 
 	return c.JSON(201, echo.Map{
@@ -265,26 +254,14 @@ func addReservationHandler(c echo.Context) error {
 			return err
 		}
 
-		tx, err := db.Begin()
-		if err != nil {
-			return err
-		}
-
-		res, err := tx.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at, price) VALUES (?, ?, ?, ?, ?)",
+		res, err := db.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at, price) VALUES (?, ?, ?, ?, ?)",
 			event.ID, sheet.ID, user.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000000"), sheet.Price+event.Price)
 		if err != nil {
-			tx.Rollback()
 			log.Println("re-try: rollback by", err)
 			continue
 		}
 		reservationID, err = res.LastInsertId()
 		if err != nil {
-			tx.Rollback()
-			log.Println("re-try: rollback by", err)
-			continue
-		}
-		if err := tx.Commit(); err != nil {
-			tx.Rollback()
 			log.Println("re-try: rollback by", err)
 			continue
 		}
@@ -359,7 +336,8 @@ func removeReservationHandler(c echo.Context) error {
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
+		tx.Rollback()
 		return err
 	}
 
@@ -438,22 +416,12 @@ func addAdminEventHandler(c echo.Context) error {
 	}
 	c.Bind(&params)
 
-	tx, err := db.Begin()
+	res, err := db.Exec("INSERT INTO events (title, public_fg, closed_fg, price, s_remains, a_remains, b_remains, c_remains) VALUES (?, ?, 0, ?, 50, 150, 300, 500)", params.Title, params.Public, params.Price)
 	if err != nil {
-		return err
-	}
-
-	res, err := tx.Exec("INSERT INTO events (title, public_fg, closed_fg, price, s_remains, a_remains, b_remains, c_remains) VALUES (?, ?, 0, ?, 50, 150, 300, 500)", params.Title, params.Public, params.Price)
-	if err != nil {
-		tx.Rollback()
 		return err
 	}
 	eventID, err := res.LastInsertId()
 	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	if err := tx.Commit(); err != nil {
 		return err
 	}
 
@@ -511,15 +479,7 @@ func editAdminEventHandler(c echo.Context) error {
 		return resError(c, "cannot_close_public_event", 400)
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec("UPDATE events SET public_fg = ?, closed_fg = ? WHERE id = ?", params.Public, params.Closed, event.ID); err != nil {
-		tx.Rollback()
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	if _, err := db.Exec("UPDATE events SET public_fg = ?, closed_fg = ? WHERE id = ?", params.Public, params.Closed, event.ID); err != nil {
 		return err
 	}
 
