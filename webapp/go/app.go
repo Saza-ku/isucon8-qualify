@@ -25,6 +25,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+const TotalSheets = 1000
+
 type User struct {
 	ID        int64  `json:"id,omitempty"`
 	Nickname  string `json:"nickname,omitempty"`
@@ -38,6 +40,10 @@ type Event struct {
 	PublicFg bool   `json:"public,omitempty"`
 	ClosedFg bool   `json:"closed,omitempty"`
 	Price    int64  `json:"price,omitempty"`
+	SRemains int
+	ARemains int
+	BRemains int
+	CRemains int
 
 	Total   int                `json:"total"`
 	Remains int                `json:"remains"`
@@ -187,13 +193,57 @@ func getLoginAdministrator(c echo.Context) (*Administrator, error) {
 }
 
 func getEvents(all bool) ([]*Event, error) {
-	tx, err := db.Begin()
+	var query string
+	if all {
+		query = `SELECT * FROM events ORDER BY id ASC`
+	} else {
+		query = `SELECT * FROM events WHERE public_fg = TRUE ORDER BY id ASC`
+	}
+
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Commit()
 
-	rows, err := tx.Query("SELECT * FROM events ORDER BY id ASC")
+	var events []*Event
+	for rows.Next() {
+		var event Event
+		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
+			return nil, err
+		}
+		event.Total = TotalSheets
+		event.Remains = event.SRemains + event.ARemains + event.BRemains + event.CRemains
+		event.Sheets = map[string]*Sheets{
+			"S": {
+				Total:   sheetsTotal["S"],
+				Price:   event.Price + sheetsPrice["S"],
+				Remains: event.SRemains,
+			},
+			"A": {
+				Total:   sheetsTotal["A"],
+				Price:   event.Price + sheetsPrice["A"],
+				Remains: event.ARemains,
+			},
+			"B": {
+				Total:   sheetsTotal["B"],
+				Price:   event.Price + sheetsPrice["B"],
+				Remains: event.BRemains,
+			},
+			"C": {
+				Total:   sheetsTotal["C"],
+				Price:   event.Price + sheetsPrice["C"],
+				Remains: event.CRemains,
+			},
+		}
+
+		events = append(events, &event)
+	}
+
+	return events, nil
+}
+
+func getEventsOld(all bool) ([]*Event, error) {
+	rows, err := db.Query("SELECT * FROM events ORDER BY id ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +252,7 @@ func getEvents(all bool) ([]*Event, error) {
 	var events []*Event
 	for rows.Next() {
 		var event Event
-		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
 			return nil, err
 		}
 		if !all && !event.PublicFg {
@@ -225,7 +275,7 @@ func getEvents(all bool) ([]*Event, error) {
 
 func getEvent(eventID, loginUserID int64) (*Event, error) {
 	var event Event
-	if err := db.QueryRow("SELECT * FROM events WHERE id = ?", eventID).Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+	if err := db.QueryRow("SELECT * FROM events WHERE id = ?", eventID).Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
 		return nil, err
 	}
 	event.Sheets = map[string]*Sheets{
@@ -352,9 +402,10 @@ func main() {
 		if err != nil {
 			return err
 		}
-		for i, v := range events {
-			events[i] = sanitizeEvent(v)
+		for i, e := range events {
+			events[i] = sanitizeEvent(e)
 		}
+
 		return c.Render(200, "index.tmpl", echo.Map{
 			"events": events,
 			"user":   c.Get("user"),
@@ -369,6 +420,9 @@ func main() {
 		if err != nil {
 			return nil
 		}
+
+		setRemains()
+		setEventsRemains()
 
 		return c.NoContent(204)
 	})
@@ -389,7 +443,10 @@ func main() {
 	e.POST("/admin/api/events/:id/actions/edit", editAdminEventHandler, adminLoginRequired)
 	e.GET("/admin/api/reports/events/:id/sales", getReportHandler, adminLoginRequired)
 	e.GET("/admin/api/reports/sales", getReportsHandler, adminLoginRequired)
+
 	setSeets()
+	setEventsRemains()
+
 	e.Start(":8080")
 }
 
@@ -433,6 +490,26 @@ var sheets map[int64]Sheet
 
 var sheetsTotal map[string]int
 var sheetsPrice map[string]int64
+
+var eventsRemains map[int64]int
+
+func setEventsRemains() {
+	eventsRemains = map[int64]int{}
+	rows, _ := db.Query(`SELECT id FROM events`)
+	for rows.Next() {
+		var eventID int
+		rows.Scan(&eventID)
+		eventsRemains[int64(eventID)] = TotalSheets
+	}
+
+	rows, _ = db.Query(`
+	SELECT event_id FROM reservations WHERE canceled_at IS NULL`)
+	for rows.Next() {
+		var eventID int64
+		rows.Scan(&eventID)
+		eventsRemains[eventID]--
+	}
+}
 
 func setSeets() {
 	sheets = map[int64]Sheet{}
@@ -530,4 +607,29 @@ func makeEvent(event Event, userID int64) (*Event, error) {
 	}
 
 	return &event, nil
+}
+
+func setRemains() {
+	events, err := getEventsOld(true)
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+	for _, e := range events {
+		_, err := db.Exec(`
+		UPDATE events
+		SET s_remains = ?, a_remains = ?, b_remains = ?, c_remains = ?
+		WHERE id = ?`,
+			e.Sheets["S"].Remains, e.Sheets["A"].Remains, e.Sheets["B"].Remains, e.Sheets["C"].Remains,
+			e.ID)
+		if err != nil {
+			fmt.Println(err)
+			panic(err)
+		}
+		fmt.Println(e.Sheets["S"].Remains, e.Sheets["A"].Remains, e.Sheets["B"].Remains, e.Sheets["C"].Remains)
+	}
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
 }

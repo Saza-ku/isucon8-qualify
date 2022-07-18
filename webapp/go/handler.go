@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -82,7 +84,7 @@ func getUserHandler(c echo.Context) error {
 		var reservation Reservation
 		var event Event
 		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price,
-			&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+			&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
 			return err
 		}
 		sheet := sheets[reservation.SheetID]
@@ -114,7 +116,12 @@ func getUserHandler(c echo.Context) error {
 		return err
 	}
 
-	rows, err = db.Query("SELECT event_id FROM reservations WHERE user_id = ? GROUP BY event_id ORDER BY MAX(IFNULL(canceled_at, reserved_at)) DESC LIMIT 5", user.ID)
+	rows, err = db.Query(`
+	SELECT e.*
+	FROM reservations r
+	JOIN events e
+	ON e.id = r.event_id
+	WHERE r.user_id = ? GROUP BY r.event_id ORDER BY MAX(IFNULL(r.canceled_at, r.reserved_at)) DESC LIMIT 5`, user.ID)
 	if err != nil {
 		return err
 	}
@@ -122,18 +129,18 @@ func getUserHandler(c echo.Context) error {
 
 	var recentEvents []*Event
 	for rows.Next() {
-		var eventID int64
-		if err := rows.Scan(&eventID); err != nil {
+		var event Event
+		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
 			return err
 		}
-		event, err := getEvent(eventID, -1)
+		e, err := makeEvent(event, -1)
 		if err != nil {
 			return err
 		}
-		for k := range event.Sheets {
-			event.Sheets[k].Detail = nil
+		for k := range e.Sheets {
+			e.Sheets[k].Detail = nil
 		}
-		recentEvents = append(recentEvents, event)
+		recentEvents = append(recentEvents, e)
 	}
 	if recentEvents == nil {
 		recentEvents = make([]*Event, 0)
@@ -282,6 +289,9 @@ func addReservationHandler(c echo.Context) error {
 			continue
 		}
 
+		eventsRemains[eventID]--
+		decrementRemains(strings.ToLower(sheet.Rank)+"_remains", int(eventID))
+
 		break
 	}
 	return c.JSON(202, echo.Map{
@@ -352,6 +362,9 @@ func removeReservationHandler(c echo.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	eventsRemains[eventID]++
+	incrementRemains(strings.ToLower(sheet.Rank)+"_remains", int(eventID))
 
 	return c.NoContent(204)
 }
@@ -430,7 +443,7 @@ func addAdminEventHandler(c echo.Context) error {
 		return err
 	}
 
-	res, err := tx.Exec("INSERT INTO events (title, public_fg, closed_fg, price) VALUES (?, ?, 0, ?)", params.Title, params.Public, params.Price)
+	res, err := tx.Exec("INSERT INTO events (title, public_fg, closed_fg, price, s_remains, a_remains, b_remains, c_remains) VALUES (?, ?, 0, ?, 50, 150, 300, 500)", params.Title, params.Public, params.Price)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -448,6 +461,9 @@ func addAdminEventHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
+	eventsRemains[eventID] = TotalSheets
+
 	return c.JSON(200, event)
 }
 
@@ -580,4 +596,12 @@ func getReportsHandler(c echo.Context) error {
 		reports = append(reports, report)
 	}
 	return renderReportCSV(c, reports)
+}
+
+func decrementRemains(row string, id int) {
+	db.Exec(fmt.Sprintf(`UPDATE events SET %s = %s - 1 WHERE id = ?`, row, row), id)
+}
+
+func incrementRemains(row string, id int) {
+	db.Exec(fmt.Sprintf(`UPDATE events SET %s = %s + 1 WHERE id = ?`, row, row), id)
 }
