@@ -76,6 +76,7 @@ type Reservation struct {
 	UserID     int64      `json:"-"`
 	ReservedAt *time.Time `json:"-"`
 	CanceledAt *time.Time `json:"-"`
+	UpdatedAt  *time.Time `json:"-"`
 
 	Event          *Event `json:"event,omitempty"`
 	SheetRank      string `json:"sheet_rank,omitempty"`
@@ -292,7 +293,7 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 	}
 	for rows.Next() {
 		var reservation Reservation
-		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price)
+		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -591,7 +592,7 @@ func makeEvent(event Event, userID int64) (*Event, error) {
 
 	for rows.Next() {
 		var reservation Reservation
-		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price)
+		err = rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -636,10 +637,5 @@ func setRemains() {
 			fmt.Println(err)
 			panic(err)
 		}
-		fmt.Println(e.Sheets["S"].Remains, e.Sheets["A"].Remains, e.Sheets["B"].Remains, e.Sheets["C"].Remains)
-	}
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
 	}
 }

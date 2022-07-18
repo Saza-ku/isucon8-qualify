@@ -38,7 +38,7 @@ slow-off:
 # オプションは合計時間ソート
 .PHONY: slow-show
 slow-show:
-	sudo mysqldumpslow -s t $(SLOW_LOG) | head -n 20
+	sudo mysqldumpslow -s t $(SLOW_LOG) | head -n 40
 .PHONY: slow-detail
 slow-detail:
 	sudo cat /var/log/mariadb/slow.log | pt-query-digest --limit 8

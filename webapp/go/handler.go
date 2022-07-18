@@ -61,7 +61,7 @@ func getUserHandler(c echo.Context) error {
 	JOIN events e
 	ON r.event_id = e.id
 	WHERE r.user_id = ? 
-	ORDER BY IFNULL(r.canceled_at, r.reserved_at) DESC
+	ORDER BY r.updated_at DESC
 	LIMIT 5`, user.ID)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func getUserHandler(c echo.Context) error {
 	for rows.Next() {
 		var reservation Reservation
 		var event Event
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price,
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt,
 			&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price, &event.SRemains, &event.ARemains, &event.BRemains, &event.CRemains); err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func getUserHandler(c echo.Context) error {
 	FROM reservations r
 	JOIN events e
 	ON e.id = r.event_id
-	WHERE r.user_id = ? GROUP BY r.event_id ORDER BY MAX(IFNULL(r.canceled_at, r.reserved_at)) DESC LIMIT 5`, user.ID)
+	WHERE r.user_id = ? GROUP BY r.event_id ORDER BY MAX(r.updated_at) DESC LIMIT 5`, user.ID)
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func removeReservationHandler(c echo.Context) error {
 	}
 
 	var reservation Reservation
-	if err := tx.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price); err != nil {
+	if err := tx.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id HAVING reserved_at = MIN(reserved_at) FOR UPDATE", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt); err != nil {
 		tx.Rollback()
 		if err == sql.ErrNoRows {
 			return resError(c, "not_reserved", 400)
@@ -506,7 +506,7 @@ func getReportHandler(c echo.Context) error {
 	var reports []Report
 	for rows.Next() {
 		var reservation Reservation
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price); err != nil {
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt); err != nil {
 			return err
 		}
 		sheet := sheets[reservation.SheetID]
@@ -537,7 +537,7 @@ func getReportsHandler(c echo.Context) error {
 	var reports []Report
 	for rows.Next() {
 		var reservation Reservation
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price); err != nil {
+		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &reservation.Price, &reservation.UpdatedAt); err != nil {
 			return err
 		}
 		sheet := sheets[reservation.SheetID]
