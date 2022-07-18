@@ -2,13 +2,16 @@
 .PHONY: build
 build:
 	cd ./webapp/go; \
-	go build -o torb app.go; \
+	go build -o torb; \
 	sudo systemctl restart torb.go.service;
+
+.PHONY: fgprof
+fgprof:
+	go tool pprof -http=0.0.0.0:8888 /home/isucon/webapp/go/isucondition http://localhost:6060/debug/fgprof
 
 .PHONY: pprof
 pprof:
-	go tool pprof -http=0.0.0.0:8080 /home/isucon/webapp/go/isucondition http://localhost:6060/debug/pprof/profile
-
+	go tool pprof -http=0.0.0.0:9999 /home/isucon/torb/webapp/go/torb http://localhost:7070/debug/pprof/profile
 
 MYSQL_HOST="127.0.0.1"
 MYSQL_PORT=3306
